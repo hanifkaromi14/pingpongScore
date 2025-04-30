@@ -119,9 +119,16 @@
 <body>
     <h1>Scoreboard Online</h1>
 
-    <div style="margin-bottom: 1rem;">
+    <strong>Pilih Mode Game yang Ingin Dimainkan:</strong><hr>
+    <div style="padding:10px; margin-bottom: 1rem;">
         <label><input type="radio" name="bestOf" value="3" checked onchange="setBestOf(3)"> Best of 3</label>
         <label style="margin-left: 1rem;"><input type="radio" name="bestOf" value="5" onchange="setBestOf(5)"> Best of 5</label>
+    </div>
+
+    <strong>Pilih Tim yang Serve Terlebih Dahulu:</strong><hr>
+    <div id="serve-selector" style="margin-bottom: 1rem;">
+        <button id="first-serve-red" onclick="setInitialServe('red')" class="reset">Red Serve First</button>
+        <button id="first-serve-blue" onclick="setInitialServe('blue')" class="reset">Blue Serve First</button>
     </div>
 
     <div class="team-wrapper">
@@ -180,6 +187,66 @@
 
         let lastSetCount = 0;
 
+        let initialServeSet = null;
+
+        function setInitialServe(team) {
+            initialServeSet = team;
+            document.getElementById('first-serve-red').disabled = true;
+            document.getElementById('first-serve-blue').disabled = true;
+
+            document.getElementById('serve-selector').style.display = 'none';
+
+            // Aktifkan serve pertama
+            applyServeHighlight(team);
+        }
+
+        function applyServeHighlight(team) {
+            const redContainer = document.querySelector('.team-container.red');
+            const blueContainer = document.querySelector('.team-container.blue');
+
+            if (team === 'red') {
+                redContainer.style.backgroundColor = '#ccff90';
+                blueContainer.style.backgroundColor = 'white';
+            } else {
+                blueContainer.style.backgroundColor = '#ccff90';
+                redContainer.style.backgroundColor = 'white';
+            }
+
+            document.getElementById('serve-red').checked = team === 'red';
+            document.getElementById('serve-blue').checked = team === 'blue';
+        }
+
+        function checkServeRotation(redGame, blueGame) {
+            if (!initialServeSet) return;
+
+            const total = redGame + blueGame;
+
+            if (redGame >= 11 || blueGame >= 11) {
+                if (Math.abs(redGame - blueGame) >= 2) {
+                    // Game selesai, nonaktifkan serve
+                    document.getElementById('serve-red').checked = false;
+                    document.getElementById('serve-blue').checked = false;
+
+                    document.querySelector('.team-container.red').style.backgroundColor = 'white';
+                    document.querySelector('.team-container.blue').style.backgroundColor = 'white';
+
+                    initialServeSet = null;
+                    document.getElementById('first-serve-red').disabled = false;
+                    document.getElementById('first-serve-blue').disabled = false;
+                    document.getElementById('serve-selector').style.display = 'block';
+
+                    return;
+                }
+            }
+
+            const isEven = total % 2 === 0;
+            if (isEven) {
+                const newServe = initialServeSet === 'red' ? 'blue' : 'red';
+                applyServeHighlight(newServe);
+                initialServeSet = newServe;
+            }
+        }
+
         function updateScore(action) {
             const team_name = {
                 red: document.getElementById('team-name-red').value,
@@ -220,10 +287,24 @@
                             blue: data.last_set.blue
                         });
                         lastSetCount = currentTotalSet;
+
+                        // RESET SERVE SETIAP MULAI SET BARU
+                        initialServeSet = null;
+                        document.getElementById('serve-selector').style.display = 'block';
+                        document.getElementById('first-serve-red').disabled = false;
+                        document.getElementById('first-serve-blue').disabled = false;
+
+                        // Pastikan visual serve clear
+                        document.getElementById('serve-red').checked = false;
+                        document.getElementById('serve-blue').checked = false;
+                        document.querySelector('.team-container.red').style.backgroundColor = 'white';
+                        document.querySelector('.team-container.blue').style.backgroundColor = 'white';
                     }
                 }
 
                 checkWinner(data);
+
+                checkServeRotation(data.red.game, data.blue.game);
             });
         }
 
@@ -238,10 +319,14 @@
             .then(() => {
                 redSetScores = [];
                 blueSetScores = [];
+                matchSetScores = [];
+                lastSetCount = 0;
+                initialServeSet = null;
+                document.getElementById('serve-selector').style.display = 'block';
+                document.getElementById('first-serve-red').disabled = false;
+                document.getElementById('first-serve-blue').disabled = false;
                 location.reload();
             });
-
-            matchSetScores = [];
         }
 
         function saveTeamName() {
@@ -273,10 +358,14 @@
                 // Ambil history lama
                 let history = JSON.parse(localStorage.getItem("matchHistory") || "[]");
 
+                // Format akhir semua skor set (misal: 2-1)
+                const finalSetScore = `${redSet}-${blueSet}`;
+
                 history.unshift({
                     red: redName,
                     blue: blueName,
                     winner: winner,
+                    finalSetScore: finalSetScore,
                     setScores: matchSetScores.map((set, i) => `Set ${i + 1}: ${set.red} - ${set.blue}`),
                     timestamp: new Date().toLocaleString()
                 });
@@ -302,8 +391,10 @@
                 history.forEach((match, index) => {
                     html += `
                         <li>
-                            ${index + 1}. ${match.red} vs ${match.blue} - <strong>Pemenang:</strong> ${match.winner}<br>
-                            <strong>Skor Set:</strong><br>
+                            <strong>${index + 1}. ${match.red} vs ${match.blue}</strong> <br>
+                            <strong>Pemenang:</strong> ${match.winner} <br>
+                            <strong>Skor Akhir Set:</strong> ${match.finalSetScore} <br>
+                            <strong>Detail Set:</strong><br>
                             ${match.setScores.join('<br>')}
                         </li>
                         <hr>
